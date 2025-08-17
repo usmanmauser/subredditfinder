@@ -1,0 +1,253 @@
+
+import React, { useEffect, useRef, useState } from 'react';
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ExternalLink, Users, TrendingUp } from "lucide-react";
+
+export default function NetworkGraph({ subredditData, onNodeClick }) {
+  const canvasRef = useRef(null);
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [hoveredNode, setHoveredNode] = useState(null);
+  const [nodes, setNodes] = useState([]);
+  const [animationFrame, setAnimationFrame] = useState(0);
+
+  const colors = {
+    center: 'var(--brand-orange)',
+    related: 'var(--dark-navy)',
+    text: '#FFFFFF',
+    line: 'rgba(74, 74, 74, 0.4)'
+  };
+  
+  useEffect(() => {
+    if (!subredditData) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const { width, height } = canvas.getBoundingClientRect();
+    
+    const centerNode = {
+      id: subredditData.name,
+      name: subredditData.display_name,
+      subscribers: subredditData.subscribers || 0,
+      x: width / 2,
+      y: height / 2,
+      radius: 45,
+      isCenter: true,
+      color: colors.center
+    };
+
+    const relatedNodes = (subredditData.related_subreddits || []).map((related, index) => {
+      const angle = (index * 2 * Math.PI) / Math.max(subredditData.related_subreddits.length, 1);
+      const distance = Math.min(width/2 - 60, height/2 - 60, 220);
+      return {
+        id: related.name,
+        name: `r/${related.name}`,
+        subscribers: related.subscribers || 0,
+        similarity: related.similarity_score || 0.5,
+        x: centerNode.x + Math.cos(angle) * distance,
+        y: centerNode.y + Math.sin(angle) * distance,
+        radius: Math.max(20, Math.min(40, (related.similarity_score || 0.5) * 45)),
+        isCenter: false,
+        color: colors.related
+      };
+    });
+
+    setNodes([centerNode, ...relatedNodes]);
+  }, [subredditData]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || nodes.length === 0) return;
+
+    const ctx = canvas.getContext('2d');
+    const { width, height } = canvas.getBoundingClientRect();
+    
+    canvas.width = width * window.devicePixelRatio;
+    canvas.height = height * window.devicePixelRatio;
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+    ctx.clearRect(0, 0, width, height);
+
+    const centerNode = nodes.find(n => n.isCenter);
+    if (centerNode) {
+      nodes.forEach(node => {
+        if (!node.isCenter) {
+          ctx.beginPath();
+          ctx.moveTo(centerNode.x, centerNode.y);
+          ctx.lineTo(node.x, node.y);
+          ctx.strokeStyle = `rgba(30, 42, 58, ${0.3 + (node.similarity || 0.5) * 0.4})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      });
+    }
+
+    nodes.forEach(node => {
+      const isHovered = hoveredNode === node.id;
+      const isSelected = selectedNode === node.id;
+      
+      ctx.beginPath();
+      ctx.arc(node.x + 2, node.y + 2, node.radius, 0, 2 * Math.PI);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, node.radius, 0, 2 * Math.PI);
+      ctx.fillStyle = node.color;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, node.radius, 0, 2 * Math.PI);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = isHovered || isSelected ? 4 : 2;
+      ctx.stroke();
+
+      ctx.fillStyle = colors.text;
+      ctx.font = `bold ${node.isCenter ? '14' : '12'}px Inter, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      const text = node.name.length > 15 ? node.name.substring(0, 15) + '...' : node.name;
+      ctx.fillText(text, node.x, node.y);
+    });
+    
+    // This just forces a re-render for the browser
+    setAnimationFrame(frame => frame + 1);
+
+  }, [nodes, hoveredNode, selectedNode, animationFrame]);
+
+  const handleMouseMove = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const hoveredNodeFound = nodes.find(node => {
+      const distance = Math.sqrt((x - node.x) ** 2 + (y - node.y) ** 2);
+      return distance <= node.radius;
+    });
+
+    setHoveredNode(hoveredNodeFound?.id || null);
+    canvas.style.cursor = hoveredNodeFound ? 'pointer' : 'default';
+  };
+
+  const handleClick = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const clickedNode = nodes.find(node => {
+      const distance = Math.sqrt((x - node.x) ** 2 + (y - node.y) ** 2);
+      return distance <= node.radius;
+    });
+
+    if (clickedNode && !clickedNode.isCenter) {
+      setSelectedNode(clickedNode.id);
+      onNodeClick(clickedNode.id);
+    }
+  };
+
+  const formatNumber = (num) => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return num.toString();
+  };
+
+  return (
+    <div className="w-full space-y-6">
+      <Card className="relative overflow-hidden bg-white border-0 shadow-2xl rounded-2xl">
+        <canvas
+          ref={canvasRef}
+          className="relative w-full h-[500px] cursor-default"
+          onMouseMove={handleMouseMove}
+          onClick={handleClick}
+        />
+        
+        {subredditData && (
+          <div className="absolute top-4 left-4 right-4">
+            <div className="bg-white/90 backdrop-blur-sm rounded-xl p-4 shadow-lg border border-white/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-[var(--dark-navy)]">{subredditData.display_name}</h3>
+                  {subredditData.subscribers && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <Users className="w-4 h-4 text-[var(--brand-orange)]" />
+                      <span className="text-sm text-[var(--dark-gray)]">
+                        {formatNumber(subredditData.subscribers)} members
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <Badge variant="outline" className="bg-[var(--peach)] text-[var(--dark-navy)] border-[var(--peach)]">
+                  <TrendingUp className="w-3 h-3 mr-1" />
+                  {(subredditData.related_subreddits || []).length} related
+                </Badge>
+              </div>
+              {subredditData.description && (
+                <p className="text-sm text-[var(--dark-gray)] mt-2 line-clamp-2">{subredditData.description}</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="absolute bottom-4 right-4">
+          <div className="bg-white/90 backdrop-blur-sm rounded-lg p-3 shadow-lg border border-white/20">
+            <div className="flex items-center gap-2 text-xs text-[var(--dark-gray)]">
+              <div className="w-3 h-3 rounded-full bg-[var(--brand-orange)]"></div>
+              <span>Main</span>
+              <div className="w-3 h-3 rounded-full bg-[var(--dark-navy)] ml-2"></div>
+              <span>Related</span>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {hoveredNode && (
+        <Card className="bg-white/95 backdrop-blur-sm border-0 shadow-lg rounded-xl">
+          <div className="p-4">
+            {(() => {
+              const node = nodes.find(n => n.id === hoveredNode);
+              if (!node) return null;
+              
+              return (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-[var(--dark-navy)]">{node.name}</h4>
+                    {node.subscribers > 0 && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <Users className="w-4 h-4 text-gray-500" />
+                        <span className="text-sm text-[var(--dark-gray)]">
+                          {formatNumber(node.subscribers)} members
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!node.isCenter && (
+                      <Badge variant="outline" className="bg-[var(--peach)] text-[var(--dark-navy)]">
+                        {Math.round((node.similarity || 0.5) * 100)}% similar
+                      </Badge>
+                    )}
+                    <a
+                      href={`https://reddit.com/${node.name.startsWith('r/') ? node.name : `r/${node.name}`}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[var(--brand-orange)] hover:opacity-80"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
