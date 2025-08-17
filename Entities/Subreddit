@@ -1,0 +1,48 @@
+{
+  "name": "Subreddit",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Subreddit name without r/ prefix"
+    },
+    "display_name": {
+      "type": "string",
+      "description": "Display name with r/ prefix"
+    },
+    "subscribers": {
+      "type": "number",
+      "description": "Number of subscribers"
+    },
+    "description": {
+      "type": "string",
+      "description": "Subreddit description"
+    },
+    "related_subreddits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "similarity_score": {
+            "type": "number"
+          },
+          "subscribers": {
+            "type": "number"
+          }
+        }
+      },
+      "description": "List of related subreddits with similarity scores"
+    },
+    "category": {
+      "type": "string",
+      "description": "Main category of the subreddit"
+    }
+  },
+  "required": [
+    "name",
+    "display_name"
+  ]
+}
