@@ -1,13 +1,43 @@
-
-import React, { useState, useEffect } from 'react';
-import { InvokeLLM } from '@/integrations/Core';
-import { Subreddit } from '@/entities/Subreddit';
-import SearchInput from '../components/search/SearchInput';
-import NetworkGraph from '../components/visualization/NetworkGraph';
-import SubredditCard from '../components/results/SubredditCard';
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card } from "@/components/ui/card";
+import React, { useState, useEffect } from "react";
+import SearchInput from "../Components/search/SearchInput";
+import NetworkGraph from "../Components/visualization/NetworkGraph";
+import SubredditCard from "../Components/results/SubredditCard";
 import { AlertCircle, Sparkles, Compass, Loader2 } from "lucide-react";
+
+/** Fetch main subreddit info */
+async function fetchSubreddit(name) {
+  const res = await fetch(`https://www.reddit.com/r/${name}/about.json`);
+  if (!res.ok) throw new Error("Subreddit not found");
+  const j = await res.json();
+  const d = j.data;
+  return {
+    name: d.display_name,                 // e.g., "javascript"
+    display_name: `r/${d.display_name}`,  // e.g., "r/javascript"
+    subscribers: d.subscribers,
+    description: d.public_description || d.title || "",
+    category: d.advertiser_category || "General",
+  };
+}
+
+/** Fetch related subs (heuristic via search) */
+async function fetchRelated(name, limit = 20) {
+  const res = await fetch(
+    `https://www.reddit.com/subreddits/search.json?q=${encodeURIComponent(name)}&limit=${limit}`
+  );
+  if (!res.ok) return [];
+  const j = await res.json();
+  return (j.data.children || [])
+    .map((c) => c.data)
+    .filter((d) => d && d.display_name && d.subscribers != null)
+    .map((d, i) => ({
+      name: d.display_name,
+      subscribers: d.subscribers,
+      description: d.public_description || d.title || "",
+      category: d.advertiser_category || "General",
+      similarity: Math.max(0.3, 1 - i * 0.03), // simple decreasing heuristic
+    }))
+    .filter((d) => d.name.toLowerCase() !== name.toLowerCase());
+}
 
 export default function SubredditFinder() {
   const [subredditData, setSubredditData] = useState(null);
@@ -28,159 +58,133 @@ export default function SubredditFinder() {
     setSubredditData(null);
 
     try {
-      const cached = await Subreddit.filter({ name: subredditName }, "-created_date", 1);
-      if (cached.length > 0 && (new Date() - new Date(cached[0].created_date)) < 24 * 60 * 60 * 1000) {
-        setSubredditData(cached[0]);
-        setIsLoading(false);
-        return;
+      // simple localStorage cache for a day
+      const key = `sr:${subredditName.toLowerCase()}`;
+      const cachedRaw = localStorage.getItem(key);
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw);
+        if (Date.now() - cached.cachedAt < 24 * 60 * 60 * 1000) {
+          setSubredditData(cached.data);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      const prompt = `
-        You are an expert Reddit community analyst for a website called "Subreddit Finder". Your goal is to provide comprehensive and accurate data about Reddit communities.
-        
-        Analyze the subreddit "r/${subredditName}". Provide detailed information about it.
-        
-        Then, find 20-25 related subreddits that are highly similar in theme, content, or audience. It is crucial to find a large number of related subreddits.
-        
-        For the main subreddit and each related one, provide:
-        - The exact subreddit name (without r/ prefix)
-        - The display name (for the main subreddit only, with r/ prefix)
-        - An accurate, up-to-date subscriber count (as a number).
-        - A concise, well-written description of the subreddit.
-        - The main category/topic (e.g., 'Technology', 'Gaming', 'Lifestyle').
-        - A similarity score (for related subreddits only) from 0.0 to 1.0, where 1.0 is extremely similar.
-        
-        Prioritize accuracy and a comprehensive list of related communities.
-      `;
+      const base = await fetchSubreddit(subredditName);
+      const related = await fetchRelated(subredditName, 24);
+      const data = { ...base, related_subreddits: related };
 
-      const response = await InvokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: Subreddit.schema()
-      });
-
-      if (response && response.name) {
-        await Subreddit.create(response);
-        setSubredditData(response);
-      } else {
-        setError('Could not find information for this subreddit. It might be very new, private, or banned.');
-      }
-    } catch (err) {
-      console.error('Error searching subreddit:', err);
-      setError('An error occurred while searching. Please try again.');
+      localStorage.setItem(key, JSON.stringify({ data, cachedAt: Date.now() }));
+      setSubredditData(data);
+    } catch (e) {
+      setError(e.message || "Something went wrong.");
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
-  const handleNodeClick = (subredditName) => {
-    document.querySelector('#search-section')?.scrollIntoView({ behavior: 'smooth' });
-    searchSubreddit(subredditName);
+  const handleNodeClick = (node) => {
+    if (!node?.name) return;
+    searchSubreddit(node.name);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
     <>
-      <div className="min-h-screen bg-[var(--cream-bg)] text-[var(--dark-navy)]">
+      <div className="min-h-screen bg-white text-[var(--dark-navy)]">
+        {/* HERO */}
         <div id="search-section" className="relative overflow-hidden bg-[var(--dark-navy)]">
-          <div className="absolute inset-0 bg-grid-white/[0.05]"></div>
+          <div className="absolute inset-0" style={{ opacity: 0.05, backgroundImage: "linear-gradient(0deg, #fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "16px 16px" }} />
           <div className="relative max-w-7xl mx-auto px-4 py-16 text-center">
             <div className="flex items-center justify-center gap-4 mb-6">
-              <div className="w-16 h-16 bg-[var(--brand-orange)] rounded-2xl flex items-center justify-center shadow-lg">
+              <div className="w-16 h-16 bg-[var(--brand-orange,#ff6a00)] rounded-2xl flex items-center justify-center shadow-lg">
                 <Compass className="w-9 h-9 text-white" />
               </div>
-              <h1 className="text-4xl md:text-6xl font-extrabold text-white">
-                Subreddit Finder
-              </h1>
+              <h1 className="text-4xl md:text-6xl font-extrabold text-white">Subreddit Finder</h1>
             </div>
-            <p className="text-xl text-gray-300 max-w-3xl mx-auto leading-relaxed">
-              Unearth hidden gems and expand your Reddit horizons. Find communities connected to your favorite subreddits.
+            <p className="text-gray-300 max-w-2xl mx-auto">
+              Discover communities related to your favorite subreddits — fast.
             </p>
-            
-            <div className="mt-12">
+
+            <div className="mt-10 max-w-2xl mx-auto">
               <SearchInput onSearch={searchSubreddit} isLoading={isLoading} />
+              {error && (
+                <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-red-700">
+                  <AlertCircle className="w-5 h-5 mt-0.5" />
+                  <div>{error}</div>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        <main className="max-w-7xl mx-auto px-4 py-12">
-          {error && (
-            <Alert variant="destructive" className="mb-8 bg-red-100 border-red-300 text-red-900">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+        {/* RESULTS */}
+        {isLoading && (
+          <div className="max-w-7xl mx-auto px-4 py-10 text-center">
+            <Loader2 className="w-8 h-8 animate-spin inline-block" />
+            <p className="mt-2 text-gray-600">Analyzing subreddit…</p>
+          </div>
+        )}
 
-          {!subredditData && !isLoading && !error && (
-            <Card className="text-center py-20 bg-white/80 backdrop-blur-sm border-0 shadow-xl rounded-2xl">
-              <div className="max-w-md mx-auto">
-                <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-[var(--brand-orange)] to-[var(--peach)] rounded-3xl flex items-center justify-center shadow-lg">
-                  <Sparkles className="w-10 h-10 text-white" />
-                </div>
-                <h2 className="text-2xl font-bold text-[var(--dark-navy)] mb-3">
-                  Your Reddit Universe Awaits
-                </h2>
-                <p className="text-[var(--dark-gray)] leading-relaxed">
-                  Enter a subreddit name above to generate a dynamic map of related communities. It's the best way to discover where to go next.
-                </p>
-              </div>
-            </Card>
-          )}
-
-          {isLoading && !subredditData && (
-             <Card className="text-center py-20 bg-white/80 backdrop-blur-sm border-0 shadow-xl rounded-2xl">
-              <div className="max-w-md mx-auto">
-                <div className="w-20 h-20 mx-auto mb-6 rounded-3xl flex items-center justify-center">
-                  <Loader2 className="w-12 h-12 text-[var(--brand-orange)] animate-spin" />
-                </div>
-                <h2 className="text-2xl font-bold text-[var(--dark-navy)] mb-3 animate-pulse">
-                  Analyzing the Redditverse...
-                </h2>
-                <p className="text-[var(--dark-gray)] leading-relaxed">
-                  Our AI is charting the connections for you. This can take up to 30 seconds.
-                </p>
-              </div>
-            </Card>
-          )}
-
-          {subredditData && (
-            <div className="space-y-12">
-              <NetworkGraph 
-                subredditData={subredditData} 
-                onNodeClick={handleNodeClick}
-              />
-              
-              {subredditData.related_subreddits && subredditData.related_subreddits.length > 0 && (
-                <div>
-                  <h2 className="text-3xl font-bold text-[var(--dark-navy)] mb-6">
-                    Explore Related Communities
-                  </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {subredditData.related_subreddits
-                      .sort((a, b) => (b.similarity_score || 0) - (a.similarity_score || 0))
-                      .map((related) => (
-                        <SubredditCard
-                          key={related.name}
-                          subreddit={related}
-                          similarity={related.similarity_score}
-                          onExplore={handleNodeClick}
-                        />
-                      ))}
+        {!isLoading && subredditData && (
+          <>
+            <div className="max-w-7xl mx-auto px-4 py-10">
+              <div className="rounded-2xl border p-6 bg-white shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold">{subredditData.display_name}</h2>
+                    <p className="text-gray-600 mt-2">{subredditData.description}</p>
+                    <div className="mt-3 text-sm text-gray-500">
+                      Subscribers: {subredditData.subscribers?.toLocaleString() ?? "—"} • Category: {subredditData.category}
+                    </div>
                   </div>
+                  <a
+                    href={`https://reddit.com/${subredditData.display_name}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[var(--brand-orange,#ff6a00)] font-medium"
+                  >
+                    View on Reddit →
+                  </a>
                 </div>
-              )}
-            </div>
-          )}
-        </main>
+              </div>
 
-        <footer className="bg-[var(--dark-navy)] text-white py-10 mt-16">
+              <div className="mt-8 rounded-2xl border bg-white shadow-sm">
+                <div className="p-4 border-b flex items-center gap-2">
+                  <Sparkles className="w-5 h-5" />
+                  <h3 className="font-semibold">Similar Communities</h3>
+                </div>
+
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                  {(subredditData.related_subreddits || []).map((sr, idx) => (
+                    <SubredditCard
+                      key={`${sr.name}-${idx}`}
+                      subreddit={sr}
+                      similarity={sr.similarity}
+                      onExplore={() => handleNodeClick(sr)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="max-w-7xl mx-auto px-4 pb-16">
+              <div className="rounded-2xl border bg-white shadow-sm">
+                <div className="p-4 border-b flex items-center gap-2">
+                  <Sparkles className="w-5 h-5" />
+                  <h3 className="font-semibold">Relationship Graph</h3>
+                </div>
+                <NetworkGraph subredditData={subredditData} onNodeClick={handleNodeClick} />
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* FOOTER */}
+        <footer className="border-t py-8">
           <div className="max-w-7xl mx-auto px-4 text-center">
             <p className="font-semibold text-lg">Subreddit Finder</p>
-            <p className="text-gray-400 mt-2">
-              Built to make community discovery on Reddit simple and beautiful.
-            </p>
-            <p className="text-xs text-gray-500 mt-4">
-              subredditfinder.site
-            </p>
+            <p className="text-gray-500 mt-2">Built to make community discovery on Reddit simple.</p>
           </div>
         </footer>
       </div>
