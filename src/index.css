@@ -4,8 +4,8 @@
 
 /* Custom theme variables */
 :root {
-  --brand-orange: #ff4500;
-  --dark-navy: #1e2a3a;
-  --dark-gray: #555555;
-  --peach: #ffdab9;
+  --brand-orange: #ff4500;   /* Reddit orange */
+  --dark-navy: #1e2a3a;      /* Dark navy background */
+  --dark-gray: #555555;      /* Neutral dark text */
+  --peach: #ffdab9;          /* Accent peach */
 }
