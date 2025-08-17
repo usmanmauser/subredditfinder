@@ -1,54 +1,55 @@
 import React from "react";
-import { Users, ExternalLink, Search } from "lucide-react";
+import { Users, ExternalLink, TrendingUp } from "lucide-react";
 
-export default function SubredditCard({ subreddit, onExplore, similarity }) {
-  const formatNumber = (n) =>
-    typeof n === "number"
-      ? n >= 1_000_000
-        ? (n / 1_000_000).toFixed(1) + "M"
-        : n >= 1_000
-        ? (n / 1_000).toFixed(1) + "K"
-        : n.toString()
-      : "—";
+export default function SubredditCard({ subreddit }) {
+  if (!subreddit) return null;
+
+  const formatNumber = (num) => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
+    if (num >= 1000) return (num / 1000).toFixed(1) + "K";
+    return num.toString();
+  };
 
   return (
-    <div className="rounded-xl border bg-white p-5 hover:shadow-md transition">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-lg font-bold">r/{subreddit.name}</h3>
-          <div className="flex items-center gap-2 mt-1 text-sm text-gray-600">
-            <Users className="w-4 h-4" />
-            {formatNumber(subreddit.subscribers)} subscribers
-          </div>
-        </div>
-        {typeof similarity === "number" && (
-          <span className="text-xs px-2 py-1 rounded-full bg-gray-100">
-            Similarity {(similarity * 100).toFixed(0)}%
-          </span>
-        )}
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold text-[var(--dark-navy)]">
+          {subreddit.display_name}
+        </h2>
+        <a
+          href={`https://reddit.com/${subreddit.display_name}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[var(--brand-orange)] hover:underline flex items-center gap-1"
+        >
+          <ExternalLink className="w-4 h-4" />
+          Visit
+        </a>
       </div>
 
-      {subreddit.description && (
-        <p className="text-gray-700 text-sm mt-3 line-clamp-3">{subreddit.description}</p>
+      {/* Subscribers */}
+      {subreddit.subscribers && (
+        <div className="flex items-center gap-2 text-gray-600">
+          <Users className="w-4 h-4" />
+          <span>{formatNumber(subreddit.subscribers)} members</span>
+        </div>
       )}
 
-      <div className="mt-4 flex gap-2">
-        <a
-          className="text-sm rounded-lg border px-3 py-2"
-          href={`https://reddit.com/r/${subreddit.name}`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <span className="inline-flex items-center gap-1">
-            <ExternalLink className="w-4 h-4" /> Open
+      {/* Description */}
+      {subreddit.description && (
+        <p className="text-gray-700 text-sm">{subreddit.description}</p>
+      )}
+
+      {/* Related count */}
+      {subreddit.related_subreddits && (
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+          <TrendingUp className="w-4 h-4 text-[var(--brand-orange)]" />
+          <span>
+            {subreddit.related_subreddits.length} related communities
           </span>
-        </a>
-        <button onClick={onExplore} className="text-sm rounded-lg border px-3 py-2">
-          <span className="inline-flex items-center gap-1">
-            <Search className="w-4 h-4" /> Explore similar
-          </span>
-        </button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
