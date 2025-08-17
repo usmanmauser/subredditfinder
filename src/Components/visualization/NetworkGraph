@@ -1,5 +1,11 @@
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from "react";
+// removed Card/Badge imports
+
+export default function NetworkGraph({ subredditData, onNodeClick }) {
+  // …keep your existing canvas code…
+}
+
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Users, TrendingUp } from "lucide-react";
