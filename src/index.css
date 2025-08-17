@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom theme variables */
+:root {
+  --brand-orange: #ff4500;
+  --dark-navy: #1e2a3a;
+  --dark-gray: #555555;
+  --peach: #ffdab9;
+}
