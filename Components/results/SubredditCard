@@ -1,0 +1,74 @@
+import React from 'react';
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Users, ExternalLink, Search } from "lucide-react";
+
+export default function SubredditCard({ subreddit, onExplore, similarity }) {
+  const formatNumber = (num) => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return num?.toString() || '0';
+  };
+
+  return (
+    <Card className="group hover:shadow-xl transition-all duration-300 border-0 bg-white/80 backdrop-blur-sm hover:bg-white rounded-xl">
+      <div className="p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-[var(--dark-navy)] group-hover:text-[var(--brand-orange)] transition-colors">
+              r/{subreddit.name}
+            </h3>
+            {subreddit.subscribers && (
+              <div className="flex items-center gap-2 mt-2">
+                <Users className="w-4 h-4 text-[var(--dark-gray)]" />
+                <span className="text-sm text-[var(--dark-gray)]">
+                  {formatNumber(subreddit.subscribers)} members
+                </span>
+              </div>
+            )}
+          </div>
+          {similarity && (
+            <Badge 
+              variant="outline" 
+              className="bg-[var(--peach)] text-[var(--dark-navy)] border-0"
+            >
+              {Math.round(similarity * 100)}% match
+            </Badge>
+          )}
+        </div>
+
+        {subreddit.description && (
+          <p className="text-sm text-[var(--dark-gray)] line-clamp-3 mb-4">
+            {subreddit.description}
+          </p>
+        )}
+
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            onClick={() => onExplore(subreddit.name)}
+            className="flex-1 bg-[var(--dark-navy)] text-white hover:bg-opacity-90"
+          >
+            <Search className="w-4 h-4 mr-2" />
+            Explore
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+            className="border-gray-300 text-[var(--dark-gray)] hover:bg-gray-100"
+          >
+            <a
+              href={`https://reddit.com/r/${subreddit.name}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
