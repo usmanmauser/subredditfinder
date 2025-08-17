@@ -1,193 +1,93 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import SearchInput from "../Components/search/SearchInput";
 import NetworkGraph from "../Components/visualization/NetworkGraph";
 import SubredditCard from "../Components/results/SubredditCard";
 import { AlertCircle, Sparkles, Compass, Loader2 } from "lucide-react";
 
-/** Fetch main subreddit info */
-async function fetchSubreddit(name) {
-  const res = await fetch(`https://www.reddit.com/r/${name}/about.json`);
-  if (!res.ok) throw new Error("Subreddit not found");
-  const j = await res.json();
-  const d = j.data;
-  return {
-    name: d.display_name,                 // e.g., "javascript"
-    display_name: `r/${d.display_name}`,  // e.g., "r/javascript"
-    subscribers: d.subscribers,
-    description: d.public_description || d.title || "",
-    category: d.advertiser_category || "General",
-  };
-}
-
-/** Fetch related subs (heuristic via search) */
-async function fetchRelated(name, limit = 20) {
-  const res = await fetch(
-    `https://www.reddit.com/subreddits/search.json?q=${encodeURIComponent(name)}&limit=${limit}`
-  );
-  if (!res.ok) return [];
-  const j = await res.json();
-  return (j.data.children || [])
-    .map((c) => c.data)
-    .filter((d) => d && d.display_name && d.subscribers != null)
-    .map((d, i) => ({
-      name: d.display_name,
-      subscribers: d.subscribers,
-      description: d.public_description || d.title || "",
-      category: d.advertiser_category || "General",
-      similarity: Math.max(0.3, 1 - i * 0.03), // simple decreasing heuristic
-    }))
-    .filter((d) => d.name.toLowerCase() !== name.toLowerCase());
-}
-
 export default function SubredditFinder() {
-  const [subredditData, setSubredditData] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [result, setResult] = useState(null);
 
-  useEffect(() => {
-    if (subredditData) {
-      document.title = `Discover Subreddits Similar to ${subredditData.display_name} | Subreddit Finder`;
-    } else {
-      document.title = "Subreddit Finder - Discover Similar Communities";
-    }
-  }, [subredditData]);
-
-  const searchSubreddit = async (subredditName) => {
-    setIsLoading(true);
+  const handleSearch = async (value) => {
+    if (!value) return;
+    setQuery(value);
+    setLoading(true);
     setError(null);
-    setSubredditData(null);
+    setResult(null);
 
     try {
-      // simple localStorage cache for a day
-      const key = `sr:${subredditName.toLowerCase()}`;
-      const cachedRaw = localStorage.getItem(key);
-      if (cachedRaw) {
-        const cached = JSON.parse(cachedRaw);
-        if (Date.now() - cached.cachedAt < 24 * 60 * 60 * 1000) {
-          setSubredditData(cached.data);
-          setIsLoading(false);
-          return;
-        }
-      }
+      // Simulate API call (replace with your backend if available)
+      await new Promise((resolve) => setTimeout(resolve, 1200));
 
-      const base = await fetchSubreddit(subredditName);
-      const related = await fetchRelated(subredditName, 24);
-      const data = { ...base, related_subreddits: related };
+      // Mock data for demo
+      const mockData = {
+        name: value.toLowerCase(),
+        display_name: `r/${value}`,
+        subscribers: Math.floor(Math.random() * 1000000),
+        description: `This is a mock description for subreddit r/${value}.`,
+        related_subreddits: [
+          { name: "javascript", subscribers: 2000000, similarity_score: 0.8 },
+          { name: "reactjs", subscribers: 1500000, similarity_score: 0.7 },
+          { name: "webdev", subscribers: 1200000, similarity_score: 0.6 },
+        ],
+      };
 
-      localStorage.setItem(key, JSON.stringify({ data, cachedAt: Date.now() }));
-      setSubredditData(data);
-    } catch (e) {
-      setError(e.message || "Something went wrong.");
+      setResult(mockData);
+    } catch (err) {
+      setError("Failed to fetch subreddit data.");
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  };
-
-  const handleNodeClick = (node) => {
-    if (!node?.name) return;
-    searchSubreddit(node.name);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
-    <>
-      <div className="min-h-screen bg-white text-[var(--dark-navy)]">
-        {/* HERO */}
-        <div id="search-section" className="relative overflow-hidden bg-[var(--dark-navy)]">
-          <div className="absolute inset-0" style={{ opacity: 0.05, backgroundImage: "linear-gradient(0deg, #fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "16px 16px" }} />
-          <div className="relative max-w-7xl mx-auto px-4 py-16 text-center">
-            <div className="flex items-center justify-center gap-4 mb-6">
-              <div className="w-16 h-16 bg-[var(--brand-orange,#ff6a00)] rounded-2xl flex items-center justify-center shadow-lg">
-                <Compass className="w-9 h-9 text-white" />
-              </div>
-              <h1 className="text-4xl md:text-6xl font-extrabold text-white">Subreddit Finder</h1>
-            </div>
-            <p className="text-gray-300 max-w-2xl mx-auto">
-              Discover communities related to your favorite subreddits — fast.
-            </p>
-
-            <div className="mt-10 max-w-2xl mx-auto">
-              <SearchInput onSearch={searchSubreddit} isLoading={isLoading} />
-              {error && (
-                <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-red-700">
-                  <AlertCircle className="w-5 h-5 mt-0.5" />
-                  <div>{error}</div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* RESULTS */}
-        {isLoading && (
-          <div className="max-w-7xl mx-auto px-4 py-10 text-center">
-            <Loader2 className="w-8 h-8 animate-spin inline-block" />
-            <p className="mt-2 text-gray-600">Analyzing subreddit…</p>
-          </div>
-        )}
-
-        {!isLoading && subredditData && (
-          <>
-            <div className="max-w-7xl mx-auto px-4 py-10">
-              <div className="rounded-2xl border p-6 bg-white shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h2 className="text-2xl font-bold">{subredditData.display_name}</h2>
-                    <p className="text-gray-600 mt-2">{subredditData.description}</p>
-                    <div className="mt-3 text-sm text-gray-500">
-                      Subscribers: {subredditData.subscribers?.toLocaleString() ?? "—"} • Category: {subredditData.category}
-                    </div>
-                  </div>
-                  <a
-                    href={`https://reddit.com/${subredditData.display_name}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[var(--brand-orange,#ff6a00)] font-medium"
-                  >
-                    View on Reddit →
-                  </a>
-                </div>
-              </div>
-
-              <div className="mt-8 rounded-2xl border bg-white shadow-sm">
-                <div className="p-4 border-b flex items-center gap-2">
-                  <Sparkles className="w-5 h-5" />
-                  <h3 className="font-semibold">Similar Communities</h3>
-                </div>
-
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-                  {(subredditData.related_subreddits || []).map((sr, idx) => (
-                    <SubredditCard
-                      key={`${sr.name}-${idx}`}
-                      subreddit={sr}
-                      similarity={sr.similarity}
-                      onExplore={() => handleNodeClick(sr)}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="max-w-7xl mx-auto px-4 pb-16">
-              <div className="rounded-2xl border bg-white shadow-sm">
-                <div className="p-4 border-b flex items-center gap-2">
-                  <Sparkles className="w-5 h-5" />
-                  <h3 className="font-semibold">Relationship Graph</h3>
-                </div>
-                <NetworkGraph subredditData={subredditData} onNodeClick={handleNodeClick} />
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* FOOTER */}
-        <footer className="border-t py-8">
-          <div className="max-w-7xl mx-auto px-4 text-center">
-            <p className="font-semibold text-lg">Subreddit Finder</p>
-            <p className="text-gray-500 mt-2">Built to make community discovery on Reddit simple.</p>
-          </div>
-        </footer>
+    <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
+      {/* Header */}
+      <div className="text-center space-y-2">
+        <h1 className="text-3xl font-bold text-[var(--dark-navy)]">
+          <Sparkles className="inline w-6 h-6 text-[var(--brand-orange)] mr-2" />
+          Subreddit Finder
+        </h1>
+        <p className="text-gray-600">
+          <Compass className="inline w-4 h-4 mr-1" />
+          Discover related communities on Reddit
+        </p>
       </div>
-    </>
+
+      {/* Search */}
+      <SearchInput onSearch={handleSearch} />
+
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center justify-center py-10 text-gray-500">
+          <Loader2 className="w-6 h-6 mr-2 animate-spin" />
+          Fetching results...
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="flex items-center justify-center gap-2 text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+          <AlertCircle className="w-5 h-5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Results */}
+      {result && (
+        <div className="space-y-6">
+          {/* Subreddit summary card */}
+          <SubredditCard subreddit={result} />
+
+          {/* Visualization */}
+          <NetworkGraph
+            subredditData={result}
+            onNodeClick={(id) => handleSearch(id)}
+          />
+        </div>
+      )}
+    </div>
   );
 }
